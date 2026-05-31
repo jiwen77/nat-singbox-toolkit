@@ -12,12 +12,16 @@ SERVICE_NAME="${SERVICE_NAME:-sing-box}"
 if [[ -t 1 ]]; then
   GREEN=$'\033[32m'
   YELLOW=$'\033[33m'
+  CYAN=$'\033[36m'
+  DIM=$'\033[2m'
   RED=$'\033[31m'
   BOLD=$'\033[1m'
   NC=$'\033[0m'
 else
   GREEN=''
   YELLOW=''
+  CYAN=''
+  DIM=''
   RED=''
   BOLD=''
   NC=''
@@ -610,19 +614,19 @@ PY
 
 menu() {
   clear || true
-  printf '%b\n\n' "${BOLD}NAT sing-box Toolkit v${VERSION}${NC}"
-  cat <<EOF
-1. 状态总览 / sing-box check
-2. 安装基础依赖
-3. 安装 sing-box Reality-only 底座（调用 fscarmen，推荐）
-4. 打开 fscarmen/sing-box 原生菜单
-5. 配置 SSH SOCKS 落地隧道（例如 landing）
-6. 应用 auth_user 多落地分流
-7. 节点摘要 / 生成 Remnawave Mihomo 片段
-8. 备份 sing-box 配置
-9. 检查并重启 sing-box
-0. 退出
-EOF
+  printf '%b\n' "${BOLD}${CYAN}NAT sing-box Toolkit${NC} ${DIM}v${VERSION}${NC}"
+  printf '%b\n\n' "${DIM}Lightweight Reality + auth_user routing helper for NAT nodes${NC}"
+  printf '%b\n' "${YELLOW} 1)${NC} 状态总览 / sing-box check"
+  printf '%b\n' "${YELLOW} 2)${NC} 安装基础依赖"
+  printf '%b\n' "${YELLOW} 3)${NC} 安装 sing-box Reality-only 底座 ${DIM}(调用 fscarmen)${NC}"
+  printf '%b\n' "${YELLOW} 4)${NC} 打开 fscarmen/sing-box 原生菜单"
+  printf '%b\n' "${YELLOW} 5)${NC} 配置 SSH SOCKS 落地隧道 ${DIM}(landing)${NC}"
+  printf '%b\n' "${YELLOW} 6)${NC} 应用 auth_user 多落地分流"
+  printf '%b\n' "${YELLOW} 7)${NC} 节点摘要 / 生成 Remnawave Mihomo 片段"
+  printf '%b\n' "${YELLOW} 8)${NC} 备份 sing-box 配置"
+  printf '%b\n' "${YELLOW} 9)${NC} 检查并重启 sing-box"
+  printf '%b\n' "${YELLOW} 0)${NC} 退出"
+  printf '\n'
 }
 
 main_loop() {
