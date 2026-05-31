@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 DEFAULT_CONF_DIR="/etc/sing-box/conf"
 DEFAULT_SERVICE="sing-box"
 
@@ -98,10 +98,22 @@ py_detect_first_tag() {
   python3 - "$1" <<'PY'
 import json, sys
 from pathlib import Path
+
+def load_jsonc(path):
+    text = path.read_text(errors='ignore')
+    if not text.strip():
+        raise ValueError('空文件')
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # fscarmen may prepend helper lines like: // "public_key":"..."
+        text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('//'))
+        return json.loads(text)
+
 conf = Path(sys.argv[1])
 for path in sorted(conf.glob('*.json')):
     try:
-        data = json.load(open(path))
+        data = load_jsonc(path)
     except Exception:
         continue
     for inbound in data.get('inbounds', []) or []:
@@ -116,11 +128,22 @@ py_list_inbounds() {
   python3 - "$1" <<'PY'
 import json, sys
 from pathlib import Path
+
+def load_jsonc(path):
+    text = path.read_text(errors='ignore')
+    if not text.strip():
+        raise ValueError('空文件')
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('//'))
+        return json.loads(text)
+
 conf = Path(sys.argv[1])
 found = False
 for path in sorted(conf.glob('*.json')):
     try:
-        data = json.load(open(path))
+        data = load_jsonc(path)
     except Exception as e:
         print(f"  ! {path.name}: JSON 读取失败: {e}")
         continue
@@ -140,9 +163,20 @@ py_first_user_uuid() {
   python3 - "$1" "$2" <<'PY'
 import json, sys
 from pathlib import Path
+
+def load_jsonc(path):
+    text = path.read_text(errors='ignore')
+    if not text.strip():
+        raise ValueError('空文件')
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('//'))
+        return json.loads(text)
+
 conf = Path(sys.argv[1]); tag = sys.argv[2]
 for path in sorted(conf.glob('*.json')):
-    try: data = json.load(open(path))
+    try: data = load_jsonc(path)
     except Exception: continue
     for inbound in data.get('inbounds', []) or []:
         if inbound.get('tag') == tag:
@@ -157,9 +191,20 @@ py_suggest_sni_shortid() {
   python3 - "$1" "$2" <<'PY'
 import json, sys
 from pathlib import Path
+
+def load_jsonc(path):
+    text = path.read_text(errors='ignore')
+    if not text.strip():
+        raise ValueError('空文件')
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('//'))
+        return json.loads(text)
+
 conf = Path(sys.argv[1]); tag = sys.argv[2]
 for path in sorted(conf.glob('*.json')):
-    try: data = json.load(open(path))
+    try: data = load_jsonc(path)
     except Exception: continue
     for inbound in data.get('inbounds', []) or []:
         if inbound.get('tag') != tag:
@@ -185,9 +230,20 @@ py_inbound_listen_port() {
   python3 - "$1" "$2" <<'PY'
 import json, sys
 from pathlib import Path
+
+def load_jsonc(path):
+    text = path.read_text(errors='ignore')
+    if not text.strip():
+        raise ValueError('空文件')
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('//'))
+        return json.loads(text)
+
 conf = Path(sys.argv[1]); tag = sys.argv[2]
 for path in sorted(conf.glob('*.json')):
-    try: data = json.load(open(path))
+    try: data = load_jsonc(path)
     except Exception: continue
     for inbound in data.get('inbounds', []) or []:
         if inbound.get('tag') == tag:
@@ -197,11 +253,14 @@ PY
 }
 
 guess_public_key_from_outputs() {
-  python3 - <<'PY'
+  python3 - "${CONF_DIR:-$DEFAULT_CONF_DIR}" <<'PY'
 import re
+import sys
 from pathlib import Path
 
+conf = Path(sys.argv[1])
 paths = [
+    *sorted(conf.glob('*.json')),
     Path('/etc/sing-box/list'),
     Path('/etc/sing-box/subscribe/proxies'),
     Path('/etc/sing-box/subscribe/clash'),
@@ -318,11 +377,22 @@ conf = Path(plan["conf_dir"])
 if not conf.is_dir():
     raise SystemExit(f"配置目录不存在: {conf}")
 
+def load_jsonc(path):
+    text = path.read_text(errors='ignore')
+    if not text.strip():
+        raise ValueError('空文件')
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # fscarmen may prepend helper lines like: // "public_key":"..."
+        text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('//'))
+        return json.loads(text)
+
 # Load all json files in conf.d style directory.
 files = []
 for path in sorted(conf.glob('*.json')):
     try:
-        files.append((path, json.load(open(path))))
+        files.append((path, load_jsonc(path)))
     except Exception as e:
         raise SystemExit(f"JSON 读取失败 {path}: {e}")
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.1"
+VERSION="0.1.2"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
 ROUTE_HELPER_URL="${ROUTE_HELPER_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh}"
@@ -158,10 +158,58 @@ show_status() {
     python3 - "$CONF_DIR" <<'PY'
 import json, sys
 from pathlib import Path
+
+def strip_json_comments(text):
+    out = []
+    in_string = False
+    escape = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if in_string:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+        elif ch == "/" and nxt == "/":
+            i += 2
+            while i < len(text) and text[i] not in "\r\n":
+                i += 1
+        elif ch == "/" and nxt == "*":
+            i += 2
+            while i + 1 < len(text) and not (text[i] == "*" and text[i + 1] == "/"):
+                if text[i] in "\r\n":
+                    out.append(text[i])
+                i += 1
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+def load_jsonc(path):
+    text = path.read_text(errors="ignore")
+    if not text.strip():
+        raise ValueError("空文件")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return json.loads(strip_json_comments(text))
+
 conf = Path(sys.argv[1])
 for path in sorted(conf.glob('*.json')):
     try:
-        data = json.load(open(path))
+        data = load_jsonc(path)
     except Exception as e:
         print(f"! {path.name}: {e}")
         continue
@@ -382,13 +430,73 @@ import urllib.request
 from pathlib import Path
 
 conf = Path(sys.argv[1])
+try:
+    tty_in = open("/dev/tty", "r", encoding="utf-8", errors="ignore")
+except Exception:
+    tty_in = None
+
+def read_prompt(prompt_text):
+    if tty_in is not None:
+        print(prompt_text, end="", flush=True)
+        line = tty_in.readline()
+        if line == "":
+            raise EOFError
+        return line.rstrip("\r\n")
+    return input(prompt_text)
+
+def strip_json_comments(text):
+    out = []
+    in_string = False
+    escape = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if in_string:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+        elif ch == "/" and nxt == "/":
+            i += 2
+            while i < len(text) and text[i] not in "\r\n":
+                i += 1
+        elif ch == "/" and nxt == "*":
+            i += 2
+            while i + 1 < len(text) and not (text[i] == "*" and text[i + 1] == "/"):
+                if text[i] in "\r\n":
+                    out.append(text[i])
+                i += 1
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+def load_jsonc(path):
+    text = path.read_text(errors="ignore")
+    if not text.strip():
+        raise ValueError("空文件")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return json.loads(strip_json_comments(text))
 
 def ask(prompt, default=""):
     if default is None:
         default = ""
     suffix = f" [{default}]" if str(default) else ""
     try:
-        value = input(f"{prompt}{suffix}: ").strip()
+        value = read_prompt(f"{prompt}{suffix}: ").strip()
     except EOFError:
         value = ""
     return value if value else str(default)
@@ -396,7 +504,7 @@ def ask(prompt, default=""):
 def yes_no(prompt, default="y"):
     suffix = "Y/n" if default.lower().startswith("y") else "y/N"
     try:
-        value = input(f"{prompt} [{suffix}]: ").strip()
+        value = read_prompt(f"{prompt} [{suffix}]: ").strip()
     except EOFError:
         value = ""
     value = value or default
@@ -406,7 +514,7 @@ def load_json_files():
     out = []
     for path in sorted(conf.glob("*.json")):
         try:
-            out.append((path, json.load(open(path))))
+            out.append((path, load_jsonc(path)))
         except Exception as e:
             print(f"! 跳过 {path.name}: JSON 读取失败: {e}")
     return out
@@ -436,6 +544,7 @@ def clean_text(path):
 
 def guess_public_keys():
     paths = [
+        *sorted(conf.glob("*.json")),
         Path("/etc/sing-box/list"),
         Path("/etc/sing-box/subscribe/proxies"),
         Path("/etc/sing-box/subscribe/clash"),
@@ -474,6 +583,7 @@ files = load_json_files()
 inbounds = []
 outbounds = []
 auth_routes = {}
+inbound_routes = {}
 
 for path, data in files:
     for inbound in data.get("inbounds", []) or []:
@@ -500,16 +610,21 @@ for path, data in files:
             users = rule.get("auth_user")
             inbound_tags = rule.get("inbound")
             outbound = rule.get("outbound")
-            if not users or not outbound:
+            if not outbound:
                 continue
-            if isinstance(users, str):
-                users = [users]
+            has_inbound_match = bool(inbound_tags)
             if isinstance(inbound_tags, str):
                 inbound_tags = [inbound_tags]
-            inbound_tags = inbound_tags or ["*"]
-            for tag in inbound_tags:
-                for user in users:
-                    auth_routes[(tag, user)] = outbound
+            if users:
+                inbound_tags = inbound_tags or ["*"]
+                if isinstance(users, str):
+                    users = [users]
+                for tag in inbound_tags:
+                    for user in users:
+                        auth_routes[(tag, user)] = outbound
+            elif has_inbound_match:
+                for tag in inbound_tags:
+                    inbound_routes[tag] = outbound
 
 print("--- VLESS/Reality inbound 摘要 ---")
 if not inbounds:
@@ -524,7 +639,7 @@ for idx, inbound in enumerate(inbounds, 1):
     for user in users:
         name = user.get("name") or "(no-name)"
         uuid = user.get("uuid") or ""
-        route = auth_routes.get((inbound["tag"], name)) or auth_routes.get(("*", name)) or "default/final"
+        route = auth_routes.get((inbound["tag"], name)) or auth_routes.get(("*", name)) or inbound_routes.get(inbound["tag"]) or inbound_routes.get("*") or "default/final"
         print(f"   - user={name} uuid={uuid} -> {route}")
 
 print("\n--- outbound 摘要 ---")
