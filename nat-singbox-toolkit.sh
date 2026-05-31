@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
 ROUTE_HELPER_URL="${ROUTE_HELPER_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh}"
@@ -610,9 +610,8 @@ PY
 
 menu() {
   clear || true
+  printf '%b\n\n' "${BOLD}NAT sing-box Toolkit v${VERSION}${NC}"
   cat <<EOF
-${BOLD}NAT sing-box Toolkit v${VERSION}${NC}
-
 1. 状态总览 / sing-box check
 2. 安装基础依赖
 3. 安装 sing-box Reality-only 底座（调用 fscarmen，推荐）
