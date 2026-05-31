@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.6"
+VERSION="0.1.7"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 TOOLKIT_URL="${TOOLKIT_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
@@ -931,6 +931,9 @@ menu() {
   printf '%b\n' "${YELLOW}10)${NC} 检查并重启 sing-box"
   printf '%b\n' "${YELLOW}11)${NC} 更新 toolkit 脚本"
   printf '%b\n' "${YELLOW} 0)${NC} 退出"
+  printf '\n'
+  printf '%b\n' "${DIM}简易步骤：新 NAT 先 2 → 3 装底座；7 生成 Remnawave 节点。${NC}"
+  printf '%b\n' "${DIM}要接落地：5 建 SSH SOCKS → 6 加分流 → 7 再生成 direct/landing 节点。${NC}"
   printf '\n'
 }
 

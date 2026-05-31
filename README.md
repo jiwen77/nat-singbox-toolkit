@@ -112,6 +112,27 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/
 0. 退出
 ```
 
+简易步骤：
+
+```text
+新 NAT 直连：
+  1) 运行菜单 2 安装基础依赖
+  2) 运行菜单 3 安装 sing-box Reality 底座
+  3) 到 NAT 面板确认公网映射端口
+  4) 运行菜单 7，生成 Remnawave/Mihomo proxies 节点片段
+
+需要接落地：
+  1) 先用菜单 5 建 SSH SOCKS 落地隧道
+  2) 再用菜单 6 添加 auth_user 分流
+  3) 最后用菜单 7 生成 direct / landing 两类节点片段
+
+日常维护：
+  - 菜单 1 看状态
+  - 菜单 8 改 sing-box 配置
+  - 菜单 10 check 并重启
+  - 菜单 11 更新脚本
+```
+
 菜单 7 默认输出中等摘要：多 inbound/多端口、协议类型（例如 `vless / tcp / reality`）、SNI、fingerprint、short-id、users、outbounds，以及用户/入口对应的出口；不会输出整份 fscarmen 订阅、完整 JSON 路由或 Mihomo 分流规则。需要复制到 Remnawave 时，可按提示生成 Mihomo `proxies:` 节点片段；如果有多个 inbound，会逐个确认公网端口、SNI、short-id、public-key。
 
 菜单 7 会优先调用 `sing-box merge -C /etc/sing-box/conf` 读取 sing-box 实际合并后的配置；如果当前环境没有 `sing-box merge`，才回退到直接扫描配置目录。回退模式兼容 fscarmen 生成的配置文件顶部 `// "public_key": "..."` 这类注释行；菜单 7 会同时识别 `auth_user` 分流和按 `inbound` 分流的多端口配置。
