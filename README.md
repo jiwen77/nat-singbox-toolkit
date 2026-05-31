@@ -117,6 +117,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/
 
 菜单 10 会从 GitHub 下载最新版主脚本和分流 helper。如果你是 `bash <(curl ...)` 临时运行，它会安装到 `/root/nat-singbox-toolkit.sh`；如果你运行的是本地脚本文件，它会备份后原地覆盖。
 
+生成 Remnawave/Mihomo 片段时，只有“客户端连接地址”和“客户端连接端口”描述的是外部访问入口：NAT 小鸡通常要把端口改成面板映射出来的公网端口。`servername/SNI`、`short-id`、`public-key` 必须与服务端 Reality 配置一致，通常直接回车；`client-fingerprint` 保持已测试值即可。
+
 发布到自己的 GitHub 后，请把脚本里的：
 
 ```bash

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.4"
+VERSION="0.1.5"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 TOOLKIT_URL="${TOOLKIT_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
@@ -774,22 +774,22 @@ for inbound in inbounds:
     print(f"\n--- 生成 inbound: {inbound['tag']} ({inbound['listen_port']}) ---")
     prefix_default = inbound["tag"] or hostname
     prefix = ask("节点名前缀", prefix_default)
-    server = ask("公网 IP/域名（自动检测不准可改）", public_ip)
-    port = ask("公网端口（NAT 映射端口；公网=内网可回车）", inbound["listen_port"])
-    sni = ask("Reality servername/SNI", inbound["sni"])
-    short_id = ask("Reality short-id（空 short-id 直接回车）", inbound["short_id"])
+    server = ask("客户端连接地址：公网 IP/域名（通常用 NAT 面板给的 IP/域名）", public_ip)
+    port = ask(f"客户端连接端口：公网映射端口（不是内部 {inbound['listen_port']} 时请改）", inbound["listen_port"])
+    sni = ask("Reality servername/SNI（必须与服务端配置一致，通常直接回车）", inbound["sni"])
+    short_id = ask("Reality short-id（必须与服务端配置一致；空 short-id 直接回车）", inbound["short_id"])
     key_default = default_key
     if len(keys) > 1:
         print("可选 public-key:")
         for i, key in enumerate(keys, 1):
             print(f"  {i}) {key}")
-        selected = ask("Reality public-key（可粘贴或输入序号）", "1")
+        selected = ask("Reality public-key（必须与服务端 private-key 配套；可粘贴或输入序号）", "1")
         if selected.isdigit() and 1 <= int(selected) <= len(keys):
             key_default = keys[int(selected) - 1]
         else:
             key_default = selected
-    public_key = ask("Reality public-key", key_default)
-    fingerprint = ask("client-fingerprint", inbound["fingerprint"] or "firefox")
+    public_key = ask("Reality public-key（必须与服务端 private-key 配套，通常直接回车）", key_default)
+    fingerprint = ask("client-fingerprint（客户端指纹；保持已测试值即可）", inbound["fingerprint"] or "firefox")
 
     for n, user in enumerate(inbound["users"], 1):
         uuid = user.get("uuid") or ""

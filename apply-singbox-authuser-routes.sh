@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.2"
+VERSION="0.1.3"
 DEFAULT_CONF_DIR="/etc/sing-box/conf"
 DEFAULT_SERVICE="sing-box"
 
@@ -723,11 +723,11 @@ main() {
   SUGGESTED_SNI="${SUGGESTED_REALITY[0]:-}"
   SUGGESTED_SHORT_ID="${SUGGESTED_REALITY[1]:-}"
   SUGGESTED_PUBLIC_KEY="$(guess_public_key_from_outputs || true)"
-  prompt PUBLIC_SERVER "公网 IP/域名（用于生成 Mihomo；自动检测不准可改）" "$DETECTED_PUBLIC_SERVER"
-  prompt PUBLIC_PORT "公网端口（NAT 映射端口；公网=内网可回车）" "$SUGGESTED_PUBLIC_PORT"
-  prompt REALITY_SNI "Reality servername/SNI" "$SUGGESTED_SNI"
-  prompt REALITY_SHORT_ID "Reality short-id（空 short-id 直接回车）" "$SUGGESTED_SHORT_ID"
-  prompt REALITY_PUBLIC_KEY "Reality public-key（会尝试从 /etc/sing-box/list 自动读取）" "$SUGGESTED_PUBLIC_KEY"
+  prompt PUBLIC_SERVER "客户端连接地址：公网 IP/域名（通常用 NAT 面板给的 IP/域名）" "$DETECTED_PUBLIC_SERVER"
+  prompt PUBLIC_PORT "客户端连接端口：公网映射端口（不是内部 ${SUGGESTED_PUBLIC_PORT} 时请改）" "$SUGGESTED_PUBLIC_PORT"
+  prompt REALITY_SNI "Reality servername/SNI（必须与服务端配置一致，通常直接回车）" "$SUGGESTED_SNI"
+  prompt REALITY_SHORT_ID "Reality short-id（必须与服务端配置一致；空 short-id 直接回车）" "$SUGGESTED_SHORT_ID"
+  prompt REALITY_PUBLIC_KEY "Reality public-key（必须与服务端 private-key 配套，通常直接回车）" "$SUGGESTED_PUBLIC_KEY"
 
   set_plan_base "$PLAN_FILE"
 
