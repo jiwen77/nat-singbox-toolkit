@@ -104,11 +104,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/
 4. 打开 fscarmen/sing-box 原生菜单
 5. 配置 SSH SOCKS 落地隧道（例如 landing）
 6. 应用 auth_user 多落地分流
-7. 查看 sing-box 节点信息 / public-key
+7. 节点摘要 / 生成 Remnawave Mihomo 片段
 8. 备份 sing-box 配置
 9. 检查并重启 sing-box
 0. 退出
 ```
+
+菜单 7 默认只输出精简摘要：多 inbound/多端口、users、outbounds，以及按 user 匹配到的出口；不会再默认打印整份 fscarmen 订阅或 JSON 路由。需要复制到 Remnawave 时，可按提示生成 Mihomo `proxies:` 片段；如果有多个 inbound，会逐个确认公网端口、SNI、short-id、public-key。
 
 发布到自己的 GitHub 后，请把脚本里的：
 

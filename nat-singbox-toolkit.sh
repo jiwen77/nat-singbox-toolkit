@@ -345,18 +345,255 @@ check_and_restart() {
   fi
 }
 
-show_singbox_list() {
-  title "查看 sing-box 节点信息"
-  for p in /etc/sing-box/list /etc/sing-box/subscribe/clash /etc/sing-box/subscribe/proxies; do
-    if [[ -f "$p" ]]; then
-      echo "--- $p ---"
-      sed -n '1,200p' "$p"
-      echo
-    fi
-  done
-  if [[ ! -f /etc/sing-box/list ]]; then
-    warn "未找到 /etc/sing-box/list；可用 fscarmen 原生菜单查看节点信息。"
+show_singbox_nodes() {
+  title "节点摘要 / Remnawave Mihomo 片段"
+  if ! command -v python3 >/dev/null 2>&1; then
+    err "需要 python3 来解析 sing-box JSON。请先运行菜单 2 安装基础依赖。"
+    return 1
   fi
+  if [[ ! -d "$CONF_DIR" ]]; then
+    err "配置目录不存在: $CONF_DIR"
+    return 1
+  fi
+  python3 - "$CONF_DIR" <<'PY'
+import json
+import os
+import re
+import socket
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+conf = Path(sys.argv[1])
+
+def ask(prompt, default=""):
+    if default is None:
+        default = ""
+    suffix = f" [{default}]" if str(default) else ""
+    try:
+        value = input(f"{prompt}{suffix}: ").strip()
+    except EOFError:
+        value = ""
+    return value if value else str(default)
+
+def yes_no(prompt, default="y"):
+    suffix = "Y/n" if default.lower().startswith("y") else "y/N"
+    try:
+        value = input(f"{prompt} [{suffix}]: ").strip()
+    except EOFError:
+        value = ""
+    value = value or default
+    return value.lower().startswith("y")
+
+def load_json_files():
+    out = []
+    for path in sorted(conf.glob("*.json")):
+        try:
+            out.append((path, json.load(open(path))))
+        except Exception as e:
+            print(f"! 跳过 {path.name}: JSON 读取失败: {e}")
+    return out
+
+def reality_meta(inbound):
+    tls = inbound.get("tls") or {}
+    reality = tls.get("reality") or {}
+    handshake = reality.get("handshake") or {}
+    sni = tls.get("server_name") or handshake.get("server") or ""
+    short_id = reality.get("short_id", "")
+    if isinstance(short_id, list):
+        short_id = short_id[0] if short_id else ""
+    elif short_id is None:
+        short_id = ""
+    fp = ""
+    utls = tls.get("utls") or {}
+    if isinstance(utls, dict):
+        fp = utls.get("fingerprint") or ""
+    return sni, str(short_id), fp or "firefox"
+
+def clean_text(path):
+    ansi = re.compile(r"\x1b\[[0-9;]*m")
+    try:
+        return ansi.sub("", path.read_text(errors="ignore"))
+    except Exception:
+        return ""
+
+def guess_public_keys():
+    paths = [
+        Path("/etc/sing-box/list"),
+        Path("/etc/sing-box/subscribe/proxies"),
+        Path("/etc/sing-box/subscribe/clash"),
+        Path("/etc/sing-box/subscribe/clash2"),
+    ]
+    patterns = [
+        re.compile(r"(?:[?&]pbk=)([^&#\s]+)"),
+        re.compile(r"public-key:\s*\"?([^\",}\s]+)\"?"),
+        re.compile(r'"public_key"\s*:\s*"([^"]+)"'),
+        re.compile(r"public_key:\s*\"?([^\",}\s]+)\"?"),
+    ]
+    keys = []
+    for path in paths:
+        if not path.is_file():
+            continue
+        text = clean_text(path)
+        for pat in patterns:
+            for match in pat.finditer(text):
+                key = match.group(1)
+                if key and key not in keys:
+                    keys.append(key)
+    return keys
+
+def detect_public_ip():
+    try:
+        with urllib.request.urlopen("https://api.ipify.org", timeout=5) as r:
+            return r.read().decode().strip()
+    except Exception:
+        return ""
+
+def yaml_quote(value):
+    value = "" if value is None else str(value)
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+files = load_json_files()
+inbounds = []
+outbounds = []
+auth_routes = {}
+
+for path, data in files:
+    for inbound in data.get("inbounds", []) or []:
+        blob = json.dumps(inbound).lower()
+        if inbound.get("type") == "vless" and ("reality" in blob or inbound.get("tls")):
+            sni, short_id, fp = reality_meta(inbound)
+            inbounds.append({
+                "file": path.name,
+                "tag": inbound.get("tag") or "",
+                "listen": inbound.get("listen") or "",
+                "listen_port": inbound.get("listen_port") or inbound.get("port") or "",
+                "users": inbound.get("users") or [],
+                "sni": sni,
+                "short_id": short_id,
+                "fingerprint": fp,
+            })
+    for outbound in data.get("outbounds", []) or []:
+        outbounds.append(outbound)
+    route = data.get("route")
+    if isinstance(route, dict):
+        for rule in route.get("rules") or []:
+            if not isinstance(rule, dict):
+                continue
+            users = rule.get("auth_user")
+            inbound_tags = rule.get("inbound")
+            outbound = rule.get("outbound")
+            if not users or not outbound:
+                continue
+            if isinstance(users, str):
+                users = [users]
+            if isinstance(inbound_tags, str):
+                inbound_tags = [inbound_tags]
+            inbound_tags = inbound_tags or ["*"]
+            for tag in inbound_tags:
+                for user in users:
+                    auth_routes[(tag, user)] = outbound
+
+print("--- VLESS/Reality inbound 摘要 ---")
+if not inbounds:
+    print("未发现 VLESS/Reality inbound。")
+    raise SystemExit
+
+for idx, inbound in enumerate(inbounds, 1):
+    print(f"{idx}. tag={inbound['tag']} file={inbound['file']} listen={inbound['listen'] or '*'}:{inbound['listen_port']} sni={inbound['sni'] or '(unknown)'} short-id={inbound['short_id']!r}")
+    users = inbound["users"]
+    if not users:
+        print("   users: (empty)")
+    for user in users:
+        name = user.get("name") or "(no-name)"
+        uuid = user.get("uuid") or ""
+        route = auth_routes.get((inbound["tag"], name)) or auth_routes.get(("*", name)) or "default/final"
+        print(f"   - user={name} uuid={uuid} -> {route}")
+
+print("\n--- outbound 摘要 ---")
+if outbounds:
+    for outbound in outbounds:
+        target = ""
+        if outbound.get("server"):
+            target = f" {outbound.get('server')}:{outbound.get('server_port', '')}"
+        print(f"- {outbound.get('tag')} ({outbound.get('type')}){target}")
+else:
+    print("(none)")
+
+if not yes_no("\n是否生成 Remnawave/Mihomo proxies 片段", "y"):
+    print("已跳过 Mihomo 片段生成。")
+    raise SystemExit
+
+public_ip = detect_public_ip()
+keys = guess_public_keys()
+default_key = keys[0] if len(keys) == 1 else ""
+if len(keys) > 1:
+    print("\n检测到多个 public-key，下面会按 inbound 逐个确认。")
+
+hostname = socket.gethostname()
+all_lines = []
+for inbound in inbounds:
+    print(f"\n--- 生成 inbound: {inbound['tag']} ({inbound['listen_port']}) ---")
+    prefix_default = inbound["tag"] or hostname
+    prefix = ask("节点名前缀", prefix_default)
+    server = ask("公网 IP/域名（自动检测不准可改）", public_ip)
+    port = ask("公网端口（NAT 映射端口；公网=内网可回车）", inbound["listen_port"])
+    sni = ask("Reality servername/SNI", inbound["sni"])
+    short_id = ask("Reality short-id（空 short-id 直接回车）", inbound["short_id"])
+    key_default = default_key
+    if len(keys) > 1:
+        print("可选 public-key:")
+        for i, key in enumerate(keys, 1):
+            print(f"  {i}) {key}")
+        selected = ask("Reality public-key（可粘贴或输入序号）", "1")
+        if selected.isdigit() and 1 <= int(selected) <= len(keys):
+            key_default = keys[int(selected) - 1]
+        else:
+            key_default = selected
+    public_key = ask("Reality public-key", key_default)
+    fingerprint = ask("client-fingerprint", inbound["fingerprint"] or "firefox")
+
+    for n, user in enumerate(inbound["users"], 1):
+        uuid = user.get("uuid") or ""
+        if not uuid:
+            continue
+        user_name = user.get("name") or f"user{n}"
+        flow = user.get("flow") or "xtls-rprx-vision"
+        node_name = f"{prefix}-{user_name}"
+        all_lines.extend([
+            f"  - name: {node_name}",
+            "    type: vless",
+            f"    server: {server or '<SERVER_OR_IP>'}",
+            f"    port: {port or '<PUBLIC_PORT>'}",
+            f"    uuid: {yaml_quote(uuid)}",
+            "    network: tcp",
+            "    tls: true",
+            "    udp: false",
+            f"    flow: {flow}",
+            f"    servername: {sni or '<REALITY_SNI>'}",
+            f"    client-fingerprint: {fingerprint or 'firefox'}",
+            "    reality-opts:",
+            f"      public-key: {yaml_quote(public_key or '<REALITY_PUBLIC_KEY>')}",
+            f"      short-id: {yaml_quote(short_id)}",
+            "",
+        ])
+
+print("\n--- Remnawave/Mihomo proxies snippet ---")
+print("\n".join(all_lines))
+
+out_dir = Path("/root") if os.geteuid() == 0 else Path.cwd()
+stamp = time.strftime("%Y%m%d-%H%M%S")
+out_file = out_dir / f"nat-singbox-toolkit-mihomo-{stamp}.yaml"
+out_file.write_text("\n".join(all_lines))
+print(f"MIHOMO_SNIPPET={out_file}")
+
+if yes_no("\n是否查看 fscarmen 原始节点文件（输出可能很长）", "n"):
+    for path in [Path("/etc/sing-box/list"), Path("/etc/sing-box/subscribe/proxies"), Path("/etc/sing-box/subscribe/clash")]:
+        if path.is_file():
+            print(f"\n--- {path} ---")
+            print(path.read_text(errors="ignore")[:20000])
+PY
 }
 
 menu() {
@@ -370,7 +607,7 @@ ${BOLD}NAT sing-box Toolkit v${VERSION}${NC}
 4. 打开 fscarmen/sing-box 原生菜单
 5. 配置 SSH SOCKS 落地隧道（例如 landing）
 6. 应用 auth_user 多落地分流
-7. 查看 sing-box 节点信息 / public-key
+7. 节点摘要 / 生成 Remnawave Mihomo 片段
 8. 备份 sing-box 配置
 9. 检查并重启 sing-box
 0. 退出
@@ -389,7 +626,7 @@ main_loop() {
       4) run_fscarmen_menu; pause ;;
       5) setup_ssh_socks_landing; pause ;;
       6) run_route_helper; pause ;;
-      7) show_singbox_list; pause ;;
+      7) show_singbox_nodes; pause ;;
       8) backup_conf; pause ;;
       9) check_and_restart; pause ;;
       0) exit 0 ;;
