@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.8"
+VERSION="0.1.9"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
-TOOLKIT_URL="${TOOLKIT_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh}"
+TOOLKIT_URL="${TOOLKIT_URL:-https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/nat-singbox-toolkit.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
-ROUTE_HELPER_URL="${ROUTE_HELPER_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh}"
+ROUTE_HELPER_URL="${ROUTE_HELPER_URL:-https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/apply-singbox-authuser-routes.sh}"
 CONF_DIR="${CONF_DIR:-/etc/sing-box/conf}"
 SINGBOX_BIN_DEFAULT="/etc/sing-box/sing-box"
 SERVICE_NAME="${SERVICE_NAME:-sing-box}"

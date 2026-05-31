@@ -35,13 +35,13 @@ ssh -i /root/.ssh/landing_ed25519 \
 ## 用法
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh)
+bash <(curl -fsSL https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/apply-singbox-authuser-routes.sh)
 ```
 
 或：
 
 ```bash
-wget -O apply-singbox-authuser-routes.sh https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh
+wget -O apply-singbox-authuser-routes.sh https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/apply-singbox-authuser-routes.sh
 bash apply-singbox-authuser-routes.sh
 ```
 
@@ -92,7 +92,7 @@ NO_RESTART=1 bash apply-singbox-authuser-routes.sh
 如果你想像工具箱一样使用，可以运行：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh)
+bash <(curl -fsSL https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/nat-singbox-toolkit.sh)
 ```
 
 菜单包含：
@@ -146,14 +146,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/
 发布到自己的 GitHub 后，请把脚本里的：
 
 ```bash
-ROUTE_HELPER_URL="https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh"
+ROUTE_HELPER_URL="https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/apply-singbox-authuser-routes.sh"
 ```
 
 改成你的真实仓库地址。也可以运行时临时覆盖：
 
 ```bash
-ROUTE_HELPER_URL=https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh \
-  bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh)
+ROUTE_HELPER_URL=https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/apply-singbox-authuser-routes.sh \
+  bash <(curl -fsSL https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/nat-singbox-toolkit.sh)
 ```
 
 ## 组合方式
