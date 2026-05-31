@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.9"
+VERSION="0.1.10"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 TOOLKIT_URL="${TOOLKIT_URL:-https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/nat-singbox-toolkit.sh}"
+TOOLKIT_API_URL="${TOOLKIT_API_URL:-https://api.github.com/repos/jiwen77/nat-singbox-toolkit/contents/nat-singbox-toolkit.sh?ref=main}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
 ROUTE_HELPER_URL="${ROUTE_HELPER_URL:-https://github.com/jiwen77/nat-singbox-toolkit/raw/refs/heads/main/apply-singbox-authuser-routes.sh}"
+ROUTE_HELPER_API_URL="${ROUTE_HELPER_API_URL:-https://api.github.com/repos/jiwen77/nat-singbox-toolkit/contents/apply-singbox-authuser-routes.sh?ref=main}"
 CONF_DIR="${CONF_DIR:-/etc/sing-box/conf}"
 SINGBOX_BIN_DEFAULT="/etc/sing-box/sing-box"
 SERVICE_NAME="${SERVICE_NAME:-sing-box}"
@@ -494,6 +496,13 @@ check_and_restart() {
   fi
 }
 
+download_github_content() {
+  local api_url="$1" output="$2"
+  curl -fsSL -H 'Accept: application/vnd.github+json' -H 'Cache-Control: no-cache' "$api_url" \
+    | python3 -c 'import base64,json,sys; data=json.load(sys.stdin); sys.stdout.buffer.write(base64.b64decode(data["content"]))' \
+    > "$output"
+}
+
 update_toolkit() {
   title "更新 NAT sing-box Toolkit"
   require_root
@@ -531,8 +540,14 @@ update_toolkit() {
 
   tmp_main="$(mktemp /tmp/nat-singbox-toolkit-update.XXXXXX)"
   tmp_helper="$(mktemp /tmp/nat-singbox-helper-update.XXXXXX)"
-  curl -fsSL -H 'Cache-Control: no-cache' "$toolkit_download_url" -o "$tmp_main"
-  curl -fsSL -H 'Cache-Control: no-cache' "$helper_download_url" -o "$tmp_helper"
+  if [[ -n "${TOOLKIT_API_URL:-}" ]] && [[ -n "${ROUTE_HELPER_API_URL:-}" ]]; then
+    info "通过 GitHub API 下载最新版，避免 raw 分支缓存。"
+    download_github_content "$TOOLKIT_API_URL" "$tmp_main"
+    download_github_content "$ROUTE_HELPER_API_URL" "$tmp_helper"
+  else
+    curl -fsSL -H 'Cache-Control: no-cache' "$toolkit_download_url" -o "$tmp_main"
+    curl -fsSL -H 'Cache-Control: no-cache' "$helper_download_url" -o "$tmp_helper"
+  fi
   bash -n "$tmp_main"
   bash -n "$tmp_helper"
 
