@@ -105,9 +105,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/
 5. 配置 SSH SOCKS 落地隧道（例如 landing）
 6. 应用 auth_user 多落地分流
 7. 节点摘要 / 生成 Remnawave Mihomo 片段
-8. 备份 sing-box 配置
-9. 检查并重启 sing-box
-10. 更新 toolkit 脚本
+8. 编辑 sing-box 配置文件（自动备份 + check）
+9. 备份 sing-box 配置
+10. 检查并重启 sing-box
+11. 更新 toolkit 脚本
 0. 退出
 ```
 
@@ -115,7 +116,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/
 
 菜单 7 会优先调用 `sing-box merge -C /etc/sing-box/conf` 读取 sing-box 实际合并后的配置；如果当前环境没有 `sing-box merge`，才回退到直接扫描配置目录。回退模式兼容 fscarmen 生成的配置文件顶部 `// "public_key": "..."` 这类注释行；菜单 7 会同时识别 `auth_user` 分流和按 `inbound` 分流的多端口配置。
 
-菜单 10 会从 GitHub 下载最新版主脚本和分流 helper。如果你是 `bash <(curl ...)` 临时运行，它会安装到 `/root/nat-singbox-toolkit.sh`；如果你运行的是本地脚本文件，它会备份后原地覆盖。
+菜单 11 会从 GitHub 下载最新版主脚本和分流 helper。如果你是 `bash <(curl ...)` 临时运行，它会安装到 `/root/nat-singbox-toolkit.sh`；如果你运行的是本地脚本文件，它会备份后原地覆盖。
+
+菜单 8 会列出 `/etc/sing-box/conf/*.json`，选择文件后先备份单个文件，再用 `nano`/`vi` 编辑；保存退出后自动运行 `sing-box check -C /etc/sing-box/conf`，通过后可选择重启，失败时会提示备份路径并可立即恢复该文件。
 
 生成 Remnawave/Mihomo 片段时，只有“客户端连接地址”和“客户端连接端口”描述的是外部访问入口：NAT 小鸡通常要把端口改成面板映射出来的公网端口。`servername/SNI`、`short-id`、`public-key` 必须与服务端 Reality 配置一致，通常直接回车；`client-fingerprint` 保持已测试值即可。
 

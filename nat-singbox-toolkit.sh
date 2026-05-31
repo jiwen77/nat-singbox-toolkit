@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.5"
+VERSION="0.1.6"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 TOOLKIT_URL="${TOOLKIT_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
@@ -395,6 +395,90 @@ backup_conf() {
   dst="${CONF_DIR}.bak.manual-$(date +%Y%m%d-%H%M%S)"
   cp -a "$CONF_DIR" "$dst"
   info "已备份到：$dst"
+}
+
+edit_singbox_config() {
+  title "编辑 sing-box 配置文件"
+  require_root
+  if [[ ! -d "$CONF_DIR" ]]; then
+    err "配置目录不存在: $CONF_DIR"
+    return 1
+  fi
+
+  local files=() f i choice selected backup editor_bin sb
+  while IFS= read -r f; do
+    files+=("$f")
+  done < <(find "$CONF_DIR" -maxdepth 1 -type f -name '*.json' -print 2>/dev/null | sort)
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    err "未找到配置文件：$CONF_DIR/*.json"
+    return 1
+  fi
+
+  echo "配置目录: $CONF_DIR"
+  echo "请选择要编辑的文件："
+  for i in "${!files[@]}"; do
+    printf '  %2d) %s\n' "$((i + 1))" "$(basename "${files[$i]}")"
+  done
+  echo "   0) 取消"
+  read -r -p "选择文件编号: " choice || true
+  if [[ -z "${choice:-}" || "$choice" == "0" ]]; then
+    warn "已取消。"
+    return 0
+  fi
+  if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#files[@]} )); then
+    err "无效编号。"
+    return 1
+  fi
+
+  selected="${files[$((choice - 1))]}"
+  backup="${selected}.bak.$(date +%Y%m%d-%H%M%S)"
+  cp -a "$selected" "$backup"
+  info "已备份文件：$backup"
+  warn "保存退出后会立即运行 sing-box check；如果失败，请重新编辑或用备份恢复。"
+
+  editor_bin="${EDITOR:-}"
+  if [[ -n "$editor_bin" && ! -x "$editor_bin" && -z "$(command -v "$editor_bin" 2>/dev/null || true)" ]]; then
+    warn "EDITOR=$editor_bin 不可用，改用自动检测编辑器。"
+    editor_bin=""
+  fi
+  if [[ -z "$editor_bin" ]]; then
+    if command -v nano >/dev/null 2>&1; then
+      editor_bin="nano"
+    elif command -v vi >/dev/null 2>&1; then
+      editor_bin="vi"
+    else
+      warn "未找到 nano/vi。"
+      if confirm "是否安装 nano" y; then
+        pkg_install nano
+        editor_bin="nano"
+      else
+        return 1
+      fi
+    fi
+  fi
+
+  "$editor_bin" "$selected"
+
+  sb="$(singbox_bin)"
+  if [[ -z "$sb" ]]; then
+    warn "未找到 sing-box，无法自动检查配置。备份在：$backup"
+    return 0
+  fi
+  if "$sb" check -C "$CONF_DIR"; then
+    info "配置检查通过。"
+    if confirm "是否重启 $SERVICE_NAME" y; then
+      service_restart "$SERVICE_NAME"
+    fi
+  else
+    err "配置检查失败。当前文件未自动回滚，备份在：$backup"
+    if confirm "是否立刻恢复这个文件的备份" n; then
+      cp -a "$backup" "$selected"
+      "$sb" check -C "$CONF_DIR" || true
+      warn "已恢复：$selected"
+    fi
+    return 1
+  fi
 }
 
 check_and_restart() {
@@ -842,9 +926,10 @@ menu() {
   printf '%b\n' "${YELLOW} 5)${NC} 配置 SSH SOCKS 落地隧道 ${DIM}(landing)${NC}"
   printf '%b\n' "${YELLOW} 6)${NC} 应用 auth_user 多落地分流"
   printf '%b\n' "${YELLOW} 7)${NC} 节点摘要 / 生成 Remnawave Mihomo 片段"
-  printf '%b\n' "${YELLOW} 8)${NC} 备份 sing-box 配置"
-  printf '%b\n' "${YELLOW} 9)${NC} 检查并重启 sing-box"
-  printf '%b\n' "${YELLOW}10)${NC} 更新 toolkit 脚本"
+  printf '%b\n' "${YELLOW} 8)${NC} 编辑 sing-box 配置文件 ${DIM}(自动备份 + check)${NC}"
+  printf '%b\n' "${YELLOW} 9)${NC} 备份 sing-box 配置"
+  printf '%b\n' "${YELLOW}10)${NC} 检查并重启 sing-box"
+  printf '%b\n' "${YELLOW}11)${NC} 更新 toolkit 脚本"
   printf '%b\n' "${YELLOW} 0)${NC} 退出"
   printf '\n'
 }
@@ -862,9 +947,10 @@ main_loop() {
       5) setup_ssh_socks_landing; pause ;;
       6) run_route_helper; pause ;;
       7) show_singbox_nodes; pause ;;
-      8) backup_conf; pause ;;
-      9) check_and_restart; pause ;;
-      10) update_toolkit; pause ;;
+      8) edit_singbox_config; pause ;;
+      9) backup_conf; pause ;;
+      10) check_and_restart; pause ;;
+      11) update_toolkit; pause ;;
       0) exit 0 ;;
       *) warn "无效选择"; sleep 1 ;;
     esac
