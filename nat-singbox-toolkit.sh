@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.7"
+VERSION="0.1.8"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 TOOLKIT_URL="${TOOLKIT_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
@@ -499,7 +499,7 @@ update_toolkit() {
   require_root
   ensure_basic_tools
 
-  local self target_dir target helper tmp_main tmp_helper backup
+  local self target_dir target helper tmp_main tmp_helper backup toolkit_download_url helper_download_url cache_bust
   self="${BASH_SOURCE[0]}"
   if [[ -f "$self" && "$self" != /dev/fd/* && "$self" != /proc/self/fd/* ]]; then
     target="$self"
@@ -517,10 +517,22 @@ update_toolkit() {
   echo "目标 helper: $helper"
   if ! confirm "确认下载最新版并覆盖本地脚本" y; then return 0; fi
 
+  cache_bust="t=$(date +%s)"
+  if [[ "$TOOLKIT_URL" == *\?* ]]; then
+    toolkit_download_url="${TOOLKIT_URL}&${cache_bust}"
+  else
+    toolkit_download_url="${TOOLKIT_URL}?${cache_bust}"
+  fi
+  if [[ "$ROUTE_HELPER_URL" == *\?* ]]; then
+    helper_download_url="${ROUTE_HELPER_URL}&${cache_bust}"
+  else
+    helper_download_url="${ROUTE_HELPER_URL}?${cache_bust}"
+  fi
+
   tmp_main="$(mktemp /tmp/nat-singbox-toolkit-update.XXXXXX)"
   tmp_helper="$(mktemp /tmp/nat-singbox-helper-update.XXXXXX)"
-  curl -fsSL "$TOOLKIT_URL" -o "$tmp_main"
-  curl -fsSL "$ROUTE_HELPER_URL" -o "$tmp_helper"
+  curl -fsSL -H 'Cache-Control: no-cache' "$toolkit_download_url" -o "$tmp_main"
+  curl -fsSL -H 'Cache-Control: no-cache' "$helper_download_url" -o "$tmp_helper"
   bash -n "$tmp_main"
   bash -n "$tmp_helper"
 
@@ -534,7 +546,11 @@ update_toolkit() {
   install -m 0755 "$tmp_helper" "$helper"
   rm -f "$tmp_main" "$tmp_helper"
 
-  info "更新完成。之后可直接运行：bash $target"
+  info "更新完成。当前菜单进程不会自动变成新版，需重新运行脚本才会看到新菜单。"
+  if confirm "是否现在重新打开新版菜单" y; then
+    exec bash "$target"
+  fi
+  info "之后可手动运行：bash $target"
 }
 
 show_singbox_nodes() {
