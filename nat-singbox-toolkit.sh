@@ -9,7 +9,19 @@ CONF_DIR="${CONF_DIR:-/etc/sing-box/conf}"
 SINGBOX_BIN_DEFAULT="/etc/sing-box/sing-box"
 SERVICE_NAME="${SERVICE_NAME:-sing-box}"
 
-GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; BOLD='\033[1m'; NC='\033[0m'
+if [[ -t 1 ]]; then
+  GREEN=$'\033[32m'
+  YELLOW=$'\033[33m'
+  RED=$'\033[31m'
+  BOLD=$'\033[1m'
+  NC=$'\033[0m'
+else
+  GREEN=''
+  YELLOW=''
+  RED=''
+  BOLD=''
+  NC=''
+fi
 info() { printf "${GREEN}==>${NC} %s\n" "$*"; }
 warn() { printf "${YELLOW}WARN:${NC} %s\n" "$*" >&2; }
 err() { printf "${RED}ERROR:${NC} %s\n" "$*" >&2; }
