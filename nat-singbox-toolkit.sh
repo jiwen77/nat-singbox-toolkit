@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.2"
+VERSION="0.1.3"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
 ROUTE_HELPER_URL="${ROUTE_HELPER_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh}"
@@ -419,7 +419,24 @@ show_singbox_nodes() {
     err "配置目录不存在: $CONF_DIR"
     return 1
   fi
-  python3 - "$CONF_DIR" <<'PY'
+  local sb merged_file merge_log py_rc
+  sb="$(singbox_bin)"
+  merged_file=""
+  merge_log=""
+  if [[ -n "$sb" ]]; then
+    merged_file="$(mktemp /tmp/nat-singbox-toolkit-merged.XXXXXX)"
+    merge_log="$(mktemp /tmp/nat-singbox-toolkit-merge.XXXXXX)"
+    if "$sb" merge "$merged_file" -C "$CONF_DIR" >"$merge_log" 2>&1 && [[ -s "$merged_file" ]]; then
+      info "已使用 sing-box merge 读取实际合并配置。"
+    else
+      warn "sing-box merge 失败，回退为直接扫描 $CONF_DIR。"
+      sed -n '1,6p' "$merge_log" >&2 || true
+      rm -f "$merged_file"
+      merged_file=""
+    fi
+  fi
+  py_rc=0
+  python3 - "$CONF_DIR" "$merged_file" <<'PY' || py_rc=$?
 import json
 import os
 import re
@@ -430,6 +447,7 @@ import urllib.request
 from pathlib import Path
 
 conf = Path(sys.argv[1])
+merged_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else None
 try:
     tty_in = open("/dev/tty", "r", encoding="utf-8", errors="ignore")
 except Exception:
@@ -511,6 +529,8 @@ def yes_no(prompt, default="y"):
     return value.lower().startswith("y")
 
 def load_json_files():
+    if merged_path and merged_path.is_file():
+        return [(Path("sing-box-merged-effective.json"), load_jsonc(merged_path))]
     out = []
     for path in sorted(conf.glob("*.json")):
         try:
@@ -725,6 +745,9 @@ if yes_no("\n是否查看 fscarmen 原始节点文件（输出可能很长）", 
             print(f"\n--- {path} ---")
             print(path.read_text(errors="ignore")[:20000])
 PY
+  [[ -n "$merged_file" ]] && rm -f "$merged_file"
+  [[ -n "$merge_log" ]] && rm -f "$merge_log"
+  return "$py_rc"
 }
 
 menu() {

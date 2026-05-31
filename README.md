@@ -112,7 +112,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/
 
 菜单 7 默认只输出精简摘要：多 inbound/多端口、users、outbounds，以及按 user 匹配到的出口；不会再默认打印整份 fscarmen 订阅或 JSON 路由。需要复制到 Remnawave 时，可按提示生成 Mihomo `proxies:` 片段；如果有多个 inbound，会逐个确认公网端口、SNI、short-id、public-key。
 
-兼容 fscarmen 生成的配置文件顶部 `// "public_key": "..."` 这类注释行；菜单 7 会同时识别 `auth_user` 分流和按 `inbound` 分流的多端口配置。
+菜单 7 会优先调用 `sing-box merge -C /etc/sing-box/conf` 读取 sing-box 实际合并后的配置；如果当前环境没有 `sing-box merge`，才回退到直接扫描配置目录。回退模式兼容 fscarmen 生成的配置文件顶部 `// "public_key": "..."` 这类注释行；菜单 7 会同时识别 `auth_user` 分流和按 `inbound` 分流的多端口配置。
 
 发布到自己的 GitHub 后，请把脚本里的：
 
