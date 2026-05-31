@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.1"
+VERSION="0.1.2"
 DEFAULT_CONF_DIR="/etc/sing-box/conf"
 DEFAULT_SERVICE="sing-box"
 
@@ -259,20 +259,36 @@ import sys
 from pathlib import Path
 
 conf = Path(sys.argv[1])
-paths = [
-    *sorted(conf.glob('*.json')),
-    Path('/etc/sing-box/list'),
-    Path('/etc/sing-box/subscribe/proxies'),
-    Path('/etc/sing-box/subscribe/clash'),
-    Path('/etc/sing-box/subscribe/clash2'),
-]
-
 ansi = re.compile(r'\x1b\[[0-9;]*m')
+conf_comment_patterns = [
+    re.compile(r'^\s*//\s*"public_key"\s*:\s*"([^"]+)"', re.M),
+    re.compile(r'^\s*//\s*public_key\s*:\s*"?([^",\s]+)"?', re.M),
+]
 patterns = [
     re.compile(r'(?:[?&]pbk=)([^&#\s]+)'),
     re.compile(r'public-key:\s*"?([^",}\s]+)"?'),
     re.compile(r'"public_key"\s*:\s*"([^"]+)"'),
     re.compile(r'public_key:\s*"?([^",}\s]+)"?'),
+]
+
+for path in sorted(conf.glob('*.json')):
+    if not path.is_file():
+        continue
+    try:
+        text = ansi.sub('', path.read_text(errors='ignore'))
+    except Exception:
+        continue
+    for pat in conf_comment_patterns:
+        m = pat.search(text)
+        if m:
+            print(m.group(1))
+            raise SystemExit
+
+paths = [
+    Path('/etc/sing-box/list'),
+    Path('/etc/sing-box/subscribe/proxies'),
+    Path('/etc/sing-box/subscribe/clash'),
+    Path('/etc/sing-box/subscribe/clash2'),
 ]
 
 for path in paths:

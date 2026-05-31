@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.1.3"
+VERSION="0.1.4"
 FSCARMEN_URL="${FSCARMEN_URL:-https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh}"
+TOOLKIT_URL="${TOOLKIT_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/nat-singbox-toolkit.sh}"
 # 发布到 GitHub 后建议改成你的仓库 raw 地址，或运行时通过 ROUTE_HELPER_URL 覆盖。
 ROUTE_HELPER_URL="${ROUTE_HELPER_URL:-https://raw.githubusercontent.com/jiwen77/nat-singbox-toolkit/main/apply-singbox-authuser-routes.sh}"
 CONF_DIR="${CONF_DIR:-/etc/sing-box/conf}"
@@ -409,6 +410,49 @@ check_and_restart() {
   fi
 }
 
+update_toolkit() {
+  title "更新 NAT sing-box Toolkit"
+  require_root
+  ensure_basic_tools
+
+  local self target_dir target helper tmp_main tmp_helper backup
+  self="${BASH_SOURCE[0]}"
+  if [[ -f "$self" && "$self" != /dev/fd/* && "$self" != /proc/self/fd/* ]]; then
+    target="$self"
+    target_dir="$(cd "$(dirname "$target")" && pwd)"
+  else
+    target="/root/nat-singbox-toolkit.sh"
+    target_dir="/root"
+    warn "当前是 bash <(curl ...) 临时运行，无法原地替换；将安装/更新到：$target"
+  fi
+  helper="${target_dir}/apply-singbox-authuser-routes.sh"
+
+  echo "主脚本: $TOOLKIT_URL"
+  echo "分流 helper: $ROUTE_HELPER_URL"
+  echo "目标主脚本: $target"
+  echo "目标 helper: $helper"
+  if ! confirm "确认下载最新版并覆盖本地脚本" y; then return 0; fi
+
+  tmp_main="$(mktemp /tmp/nat-singbox-toolkit-update.XXXXXX)"
+  tmp_helper="$(mktemp /tmp/nat-singbox-helper-update.XXXXXX)"
+  curl -fsSL "$TOOLKIT_URL" -o "$tmp_main"
+  curl -fsSL "$ROUTE_HELPER_URL" -o "$tmp_helper"
+  bash -n "$tmp_main"
+  bash -n "$tmp_helper"
+
+  mkdir -p "$target_dir"
+  if [[ -f "$target" ]]; then
+    backup="${target}.bak.$(date +%Y%m%d-%H%M%S)"
+    cp -a "$target" "$backup"
+    info "主脚本已备份：$backup"
+  fi
+  install -m 0755 "$tmp_main" "$target"
+  install -m 0755 "$tmp_helper" "$helper"
+  rm -f "$tmp_main" "$tmp_helper"
+
+  info "更新完成。之后可直接运行：bash $target"
+}
+
 show_singbox_nodes() {
   title "节点摘要 / Remnawave Mihomo 片段"
   if ! command -v python3 >/dev/null 2>&1; then
@@ -555,6 +599,21 @@ def reality_meta(inbound):
         fp = utls.get("fingerprint") or ""
     return sni, str(short_id), fp or "firefox"
 
+def inbound_network(inbound):
+    transport = inbound.get("transport") or {}
+    if isinstance(transport, dict) and transport.get("type"):
+        return str(transport.get("type"))
+    return str(inbound.get("network") or "tcp")
+
+def inbound_security(inbound):
+    tls = inbound.get("tls") or {}
+    reality = tls.get("reality") or {}
+    if isinstance(reality, dict) and reality.get("enabled"):
+        return "reality"
+    if isinstance(tls, dict) and tls.get("enabled"):
+        return "tls"
+    return "none"
+
 def clean_text(path):
     ansi = re.compile(r"\x1b\[[0-9;]*m")
     try:
@@ -563,8 +622,25 @@ def clean_text(path):
         return ""
 
 def guess_public_keys():
+    keys = []
+    # fscarmen sometimes stores the Reality public key as a comment above
+    # the inbound file. Do not collect arbitrary JSON public_key values here:
+    # WireGuard endpoints also use public_key, but they are not Reality keys.
+    conf_comment_patterns = [
+        re.compile(r'^\s*//\s*"public_key"\s*:\s*"([^"]+)"', re.M),
+        re.compile(r'^\s*//\s*public_key\s*:\s*"?([^",\s]+)"?', re.M),
+    ]
+    for path in sorted(conf.glob("*.json")):
+        if not path.is_file():
+            continue
+        text = clean_text(path)
+        for pat in conf_comment_patterns:
+            for match in pat.finditer(text):
+                key = match.group(1)
+                if key and key not in keys:
+                    keys.append(key)
+
     paths = [
-        *sorted(conf.glob("*.json")),
         Path("/etc/sing-box/list"),
         Path("/etc/sing-box/subscribe/proxies"),
         Path("/etc/sing-box/subscribe/clash"),
@@ -576,7 +652,6 @@ def guess_public_keys():
         re.compile(r'"public_key"\s*:\s*"([^"]+)"'),
         re.compile(r"public_key:\s*\"?([^\",}\s]+)\"?"),
     ]
-    keys = []
     for path in paths:
         if not path.is_file():
             continue
@@ -599,6 +674,10 @@ def yaml_quote(value):
     value = "" if value is None else str(value)
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
+def yaml_plain(value, placeholder):
+    value = "" if value is None else str(value)
+    return value or placeholder
+
 files = load_json_files()
 inbounds = []
 outbounds = []
@@ -613,6 +692,9 @@ for path, data in files:
             inbounds.append({
                 "file": path.name,
                 "tag": inbound.get("tag") or "",
+                "type": inbound.get("type") or "",
+                "network": inbound_network(inbound),
+                "security": inbound_security(inbound),
                 "listen": inbound.get("listen") or "",
                 "listen_port": inbound.get("listen_port") or inbound.get("port") or "",
                 "users": inbound.get("users") or [],
@@ -652,17 +734,21 @@ if not inbounds:
     raise SystemExit
 
 for idx, inbound in enumerate(inbounds, 1):
-    print(f"{idx}. tag={inbound['tag']} file={inbound['file']} listen={inbound['listen'] or '*'}:{inbound['listen_port']} sni={inbound['sni'] or '(unknown)'} short-id={inbound['short_id']!r}")
+    print(f"{idx}. {inbound['tag'] or '(no-tag)'}")
+    print(f"   protocol: {inbound['type'] or 'unknown'} / {inbound['network']} / security={inbound['security']}")
+    print(f"   listen: {inbound['listen'] or '*'}:{inbound['listen_port']}  sni={inbound['sni'] or '(unknown)'}  fp={inbound['fingerprint']}  short-id={inbound['short_id']!r}")
     users = inbound["users"]
     if not users:
         print("   users: (empty)")
     for user in users:
         name = user.get("name") or "(no-name)"
         uuid = user.get("uuid") or ""
+        flow = user.get("flow") or ""
         route = auth_routes.get((inbound["tag"], name)) or auth_routes.get(("*", name)) or inbound_routes.get(inbound["tag"]) or inbound_routes.get("*") or "default/final"
-        print(f"   - user={name} uuid={uuid} -> {route}")
+        flow_desc = f" flow={flow}" if flow else ""
+        print(f"   - user={name} uuid={uuid}{flow_desc} -> {route}")
 
-print("\n--- outbound 摘要 ---")
+print("\n--- outbound 摘要（仅 tag / type / target） ---")
 if outbounds:
     for outbound in outbounds:
         target = ""
@@ -717,7 +803,7 @@ for inbound in inbounds:
             "    type: vless",
             f"    server: {server or '<SERVER_OR_IP>'}",
             f"    port: {port or '<PUBLIC_PORT>'}",
-            f"    uuid: {yaml_quote(uuid)}",
+            f"    uuid: {yaml_plain(uuid, '<UUID>')}",
             "    network: tcp",
             "    tls: true",
             "    udp: false",
@@ -725,12 +811,13 @@ for inbound in inbounds:
             f"    servername: {sni or '<REALITY_SNI>'}",
             f"    client-fingerprint: {fingerprint or 'firefox'}",
             "    reality-opts:",
-            f"      public-key: {yaml_quote(public_key or '<REALITY_PUBLIC_KEY>')}",
+            f"      public-key: {yaml_plain(public_key, '<REALITY_PUBLIC_KEY>')}",
             f"      short-id: {yaml_quote(short_id)}",
             "",
         ])
 
-print("\n--- Remnawave/Mihomo proxies snippet ---")
+print("\n--- Remnawave/Mihomo proxies snippet（只含 proxies 节点，不含 rules） ---")
+print("# 粘贴到 Remnawave Mihomo Template 的 proxies: 下方")
 print("\n".join(all_lines))
 
 out_dir = Path("/root") if os.geteuid() == 0 else Path.cwd()
@@ -738,12 +825,6 @@ stamp = time.strftime("%Y%m%d-%H%M%S")
 out_file = out_dir / f"nat-singbox-toolkit-mihomo-{stamp}.yaml"
 out_file.write_text("\n".join(all_lines))
 print(f"MIHOMO_SNIPPET={out_file}")
-
-if yes_no("\n是否查看 fscarmen 原始节点文件（输出可能很长）", "n"):
-    for path in [Path("/etc/sing-box/list"), Path("/etc/sing-box/subscribe/proxies"), Path("/etc/sing-box/subscribe/clash")]:
-        if path.is_file():
-            print(f"\n--- {path} ---")
-            print(path.read_text(errors="ignore")[:20000])
 PY
   [[ -n "$merged_file" ]] && rm -f "$merged_file"
   [[ -n "$merge_log" ]] && rm -f "$merge_log"
@@ -763,6 +844,7 @@ menu() {
   printf '%b\n' "${YELLOW} 7)${NC} 节点摘要 / 生成 Remnawave Mihomo 片段"
   printf '%b\n' "${YELLOW} 8)${NC} 备份 sing-box 配置"
   printf '%b\n' "${YELLOW} 9)${NC} 检查并重启 sing-box"
+  printf '%b\n' "${YELLOW}10)${NC} 更新 toolkit 脚本"
   printf '%b\n' "${YELLOW} 0)${NC} 退出"
   printf '\n'
 }
@@ -782,6 +864,7 @@ main_loop() {
       7) show_singbox_nodes; pause ;;
       8) backup_conf; pause ;;
       9) check_and_restart; pause ;;
+      10) update_toolkit; pause ;;
       0) exit 0 ;;
       *) warn "无效选择"; sleep 1 ;;
     esac
